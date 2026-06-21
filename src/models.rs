@@ -81,6 +81,68 @@ pub struct AccountId {
     pub id: String,
 }
 
+/// Detailed account information returned by `/accounts/{accountId}`.
+///
+/// The big per-day `stats_history` and `ip_traffic` maps are left as raw JSON;
+/// the fields you'll actually reach for (root folder, tier, quotas, current
+/// usage) are typed.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AccountInfo {
+    /// Account ID.
+    pub id: String,
+    /// Registered email address.
+    pub email: Option<String>,
+    /// Account tier, e.g. `"guest"`, `"standard"`, `"premium"`.
+    pub tier: Option<String>,
+    /// Premium kind when applicable, e.g. `"subscription"`.
+    pub premium_type: Option<String>,
+    /// The account's API token (the same credential used to authenticate).
+    pub token: Option<String>,
+    /// The permanent root folder ID — the base for every upload and folder.
+    pub root_folder: Option<String>,
+    /// Account creation time (Unix seconds).
+    pub create_time: Option<i64>,
+    /// Subscription provider, e.g. `"patreon"`.
+    pub subscription_provider: Option<String>,
+    /// Subscription end time (Unix seconds).
+    pub subscription_end_date: Option<i64>,
+    /// Direct-traffic allowance, in bytes.
+    pub subscription_limit_direct_traffic: Option<i64>,
+    /// Storage allowance, in bytes.
+    pub subscription_limit_storage: Option<i64>,
+    /// Snapshot of current usage (file/folder counts, storage, traffic).
+    pub stats_current: Option<AccountStats>,
+    /// Per-day historical stats, keyed `year -> month -> day`. Large; raw JSON.
+    pub stats_history: Option<serde_json::Value>,
+    /// Per-day IP traffic totals, keyed `year -> month -> day`. Large; raw JSON.
+    pub ip_traffic: Option<serde_json::Value>,
+    /// Geo/ASN info about the IP that made the request. Raw JSON.
+    pub ipinfo: Option<serde_json::Value>,
+    /// Any additional fields returned by the API.
+    #[serde(flatten)]
+    pub extra: HashMap<String, serde_json::Value>,
+}
+
+/// A usage snapshot, as found in [`AccountInfo::stats_current`] and in each
+/// day of the history map. All byte counts are raw bytes.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AccountStats {
+    pub folder_count: Option<i64>,
+    pub file_count: Option<i64>,
+    /// Bytes currently stored.
+    pub storage: Option<i64>,
+    /// Bytes served via generated direct links.
+    pub traffic_direct_generated: Option<i64>,
+    /// Bytes served via direct (request) downloads.
+    pub traffic_req_downloaded: Option<i64>,
+    /// Bytes served via the web download pages.
+    pub traffic_web_downloaded: Option<i64>,
+    #[serde(flatten)]
+    pub extra: HashMap<String, serde_json::Value>,
+}
+
 /// Attributes that can be modified through the content update endpoint.
 ///
 /// Note: only `Name` is valid for files; the rest apply to folders only.

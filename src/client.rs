@@ -6,8 +6,8 @@ use serde_json::json;
 
 use crate::error::{Error, Result};
 use crate::models::{
-    AccountId, ContentAttribute, CreatedFolder, DirectLink, DirectLinkOptions, Envelope,
-    UploadResult,
+    AccountId, AccountInfo, ContentAttribute, CreatedFolder, DirectLink, DirectLinkOptions,
+    Envelope, UploadResult,
 };
 use crate::region::UploadRegion;
 
@@ -374,13 +374,27 @@ impl Gofile {
         Ok(id.id)
     }
 
-    /// Get detailed information about an account.
-    pub async fn account_info(&self, account_id: &str) -> Result<serde_json::Value> {
+    /// Get detailed information about an account, including its root folder ID,
+    /// tier, quotas, and current usage.
+    pub async fn account_info(&self, account_id: &str) -> Result<AccountInfo> {
         let resp = self
             .authorize(self.http.get(self.api_url(&format!("/accounts/{account_id}"))))
             .send()
             .await?;
         decode(resp).await
+    }
+
+    /// Convenience: resolve the token's account and return its root folder ID.
+    ///
+    /// Equivalent to calling [`Gofile::account_id`] then [`Gofile::account_info`]
+    /// and reading `root_folder`. Requires an API token.
+    pub async fn root_folder_id(&self) -> Result<String> {
+        let id = self.account_id().await?;
+        let info = self.account_info(&id).await?;
+        info.root_folder.ok_or_else(|| Error::Api {
+            status: "missing-rootFolder".to_string(),
+            data: serde_json::Value::Null,
+        })
     }
 
     // ----- internals ------------------------------------------------------

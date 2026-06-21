@@ -13,13 +13,11 @@
 //!     // Token from https://gofile.io/myprofile
 //!     let gofile = Gofile::new("YOUR_API_TOKEN");
 //!
-//!     // Find your root folder.
-//!     let account_id = gofile.account_id().await?;
-//!     let account = gofile.account_info(&account_id).await?;
-//!     let root = account["rootFolder"].as_str().unwrap_or_default();
+//!     // Find your root folder (resolves the account, then reads root_folder).
+//!     let root = gofile.root_folder_id().await?;
 //!
 //!     // Make a folder and upload into it.
-//!     let folder = gofile.create_folder(root, Some("backups"), Some(false)).await?;
+//!     let folder = gofile.create_folder(&root, Some("backups"), Some(false)).await?;
 //!     let folder_id = folder.id.clone().unwrap();
 //!
 //!     let result = gofile.upload_file_to("./archive.zip", Some(&folder_id)).await?;
@@ -52,6 +50,7 @@ mod region;
 pub use client::{Gofile, GofileBuilder};
 pub use error::{Error, Result};
 pub use models::{
-    AccountId, ContentAttribute, CreatedFolder, DirectLink, DirectLinkOptions, UploadResult,
+    AccountId, AccountInfo, AccountStats, ContentAttribute, CreatedFolder, DirectLink,
+    DirectLinkOptions, UploadResult,
 };
 pub use region::UploadRegion;
