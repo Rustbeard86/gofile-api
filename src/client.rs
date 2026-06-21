@@ -134,7 +134,14 @@ impl Gofile {
         use futures_util::stream::{self, StreamExt};
 
         let region = self.region;
-        stream::iter(paths.iter().enumerate())
+        // Own the paths up front so each task captures a `PathBuf` by move
+        // rather than borrowing a reference out of the stream (which trips a
+        // higher-ranked lifetime bound when this future is driven behind the
+        // `Send` requirement of a Tauri command).
+        let owned: Vec<std::path::PathBuf> =
+            paths.iter().map(|p| p.as_ref().to_path_buf()).collect();
+
+        stream::iter(owned.into_iter().enumerate())
             .map(|(idx, path)| async move {
                 (idx, self.upload_file_with(path, folder_id, region).await)
             })

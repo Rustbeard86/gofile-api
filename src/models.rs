@@ -18,7 +18,7 @@ pub(crate) struct Envelope<T> {
 }
 
 /// Result of a successful file upload.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UploadResult {
     /// Identifier of the uploaded file.
@@ -45,7 +45,7 @@ pub struct UploadResult {
 }
 
 /// Result of creating a folder.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreatedFolder {
     /// Identifier of the new folder.
@@ -64,7 +64,7 @@ pub struct CreatedFolder {
 }
 
 /// Result of creating a direct link.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DirectLink {
     /// Identifier of the direct link (needed to update or delete it).
@@ -76,7 +76,7 @@ pub struct DirectLink {
 }
 
 /// Account identifier wrapper returned by `/accounts/getid`.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AccountId {
     pub id: String,
 }
@@ -86,7 +86,7 @@ pub struct AccountId {
 /// The big per-day `stats_history` and `ip_traffic` maps are left as raw JSON;
 /// the fields you'll actually reach for (root folder, tier, quotas, current
 /// usage) are typed.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AccountInfo {
     /// Account ID.
@@ -126,7 +126,7 @@ pub struct AccountInfo {
 
 /// A usage snapshot, as found in [`AccountInfo::stats_current`] and in each
 /// day of the history map. All byte counts are raw bytes.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AccountStats {
     pub folder_count: Option<i64>,
@@ -191,7 +191,7 @@ impl ContentAttribute {
 }
 
 /// Restrictions that can be attached to a direct link.
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DirectLinkOptions {
     /// Unix timestamp when the link should expire.
