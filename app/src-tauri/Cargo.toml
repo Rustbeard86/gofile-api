@@ -1,0 +1,31 @@
+[package]
+name = "gofile-manager"
+version = "0.1.0"
+edition = "2021"
+description = "Desktop management tool for the Gofile API"
+default-run = "gofile-manager"
+
+# Standalone workspace so this app's heavy deps don't get pulled into the
+# library crate at the repo root.
+[workspace]
+
+[lib]
+name = "gofile_manager_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["sync"] }
+gofile-api = { path = "../.." }
+
+[profile.release]
+opt-level = "s"
+lto = true
+strip = true

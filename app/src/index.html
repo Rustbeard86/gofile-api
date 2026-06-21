@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gofile Manager</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <!-- Connect screen -->
+    <section id="connect-screen" class="connect-screen">
+      <div class="connect-card">
+        <div class="brand brand-lg">
+          <span class="logo">📁</span>
+          <span class="brand-name">Gofile <em>Manager</em></span>
+        </div>
+        <p class="muted">A desktop front-end for your Gofile account. Paste your API token to begin.</p>
+        <input id="token-input" type="password" placeholder="API token (gofile.io/myprofile)" autocomplete="off" />
+        <label class="checkrow"><input type="checkbox" id="remember-token" checked /> Remember token on this device</label>
+        <button id="connect-btn" class="btn btn-primary btn-block">Connect</button>
+        <div id="connect-error" class="error-text"></div>
+        <p class="muted tiny">Your token is stored locally and sent only to gofile.io.</p>
+      </div>
+    </section>
+
+    <!-- Main app -->
+    <div id="app" class="app hidden">
+      <!-- Sidebar -->
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="logo">📁</span>
+          <span class="brand-name">Gofile <em>Manager</em></span>
+        </div>
+
+        <div id="account-card" class="account-card">
+          <div class="acct-top">
+            <div class="acct-avatar" id="acct-avatar">G</div>
+            <div class="acct-id">
+              <div class="acct-email" id="acct-email">—</div>
+              <span class="badge badge-tier" id="acct-tier">—</span>
+            </div>
+          </div>
+          <div class="storage">
+            <div class="storage-bar"><div class="storage-fill" id="storage-fill"></div></div>
+            <div class="storage-label" id="storage-label">— / —</div>
+          </div>
+          <div class="acct-stats" id="acct-stats"></div>
+        </div>
+
+        <nav class="nav">
+          <button class="nav-item active" data-view="browse"><span>🗂️</span> Browse</button>
+          <button class="nav-item" data-view="search"><span>🔎</span> Search</button>
+          <button class="nav-item" id="nav-root"><span>🏠</span> Root folder</button>
+        </nav>
+
+        <div class="sidebar-bottom">
+          <button class="btn btn-ghost btn-block" id="reset-token-btn">♻️ Reset API token</button>
+          <button class="btn btn-ghost btn-block" id="disconnect-btn">⎋ Disconnect</button>
+        </div>
+      </aside>
+
+      <!-- Main pane -->
+      <main class="main">
+        <header class="topbar">
+          <nav class="breadcrumb" id="breadcrumb"></nav>
+          <div class="topbar-actions">
+            <button class="btn" id="copy-folder-id" title="Copy current folder ID">🆔 Copy ID</button>
+            <button class="btn" id="refresh-btn" title="Refresh">🔄 Refresh</button>
+          </div>
+        </header>
+
+        <div class="toolbar">
+          <div class="toolbar-left">
+            <button class="btn btn-primary" id="upload-btn">⬆️ Upload files</button>
+            <button class="btn" id="create-folder-btn">📁＋ New folder</button>
+          </div>
+          <div class="toolbar-right">
+            <div class="search-inline">
+              <input id="filter-input" type="text" placeholder="Filter this folder…" />
+            </div>
+            <select id="sort-select" class="select" title="Sort by">
+              <option value="name">Name</option>
+              <option value="createTime">Date</option>
+              <option value="size">Size</option>
+              <option value="type">Type</option>
+            </select>
+            <button class="btn btn-icon" id="sort-dir" title="Toggle sort direction">⬍</button>
+          </div>
+        </div>
+
+        <!-- Bulk action bar -->
+        <div class="bulkbar hidden" id="bulkbar">
+          <span id="bulk-count">0 selected</span>
+          <div class="spacer"></div>
+          <button class="btn btn-sm" data-bulk="move">Move</button>
+          <button class="btn btn-sm" data-bulk="copy">Copy</button>
+          <button class="btn btn-sm" data-bulk="directlink">Direct link</button>
+          <button class="btn btn-sm btn-danger" data-bulk="delete">Delete</button>
+          <button class="btn btn-sm btn-ghost" id="bulk-clear">Clear</button>
+        </div>
+
+        <!-- Search view -->
+        <div class="search-view hidden" id="search-view">
+          <input id="search-input" type="text" placeholder="Search recursively in current folder…" />
+          <button class="btn btn-primary" id="search-go">Search</button>
+        </div>
+
+        <!-- Content list -->
+        <div class="content" id="content">
+          <div class="list-head">
+            <label class="cb"><input type="checkbox" id="select-all" /></label>
+            <span class="col-name">Name</span>
+            <span class="col-meta">Modified</span>
+            <span class="col-size">Size</span>
+            <span class="col-actions">Actions</span>
+          </div>
+          <div id="rows" class="rows"></div>
+          <div id="empty" class="empty hidden">This folder is empty.</div>
+        </div>
+      </main>
+    </div>
+
+    <!-- Drop overlay -->
+    <div id="drop-overlay" class="drop-overlay hidden"><div>Drop files to upload here</div></div>
+
+    <!-- Modal host -->
+    <div id="modal-host" class="modal-host hidden"></div>
+
+    <!-- Toasts -->
+    <div id="toasts" class="toasts"></div>
+
+    <script src="app.js"></script>
+  </body>
+</html>

@@ -88,6 +88,18 @@ let res = gofile.upload_bytes(data, "note.txt", None).await?;
 
 See `examples/upload.rs` for a runnable example.
 
+## Desktop app
+
+A Tauri desktop manager built on this crate lives in [`app/`](app/) — browse,
+upload (drag-and-drop), rename, move/copy, delete, direct links, search, and
+token reset in a real UI. Run it with:
+
+```powershell
+cargo run --manifest-path app/src-tauri/Cargo.toml
+```
+
+See [`app/README.md`](app/README.md) for details.
+
 ## Notes
 
 - Most endpoints require a **premium account**. Free/guest accounts can only
