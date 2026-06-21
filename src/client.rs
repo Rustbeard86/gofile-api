@@ -397,6 +397,23 @@ impl Gofile {
         })
     }
 
+    /// Reset the account's API token. The current token is invalidated
+    /// immediately and a login link with the new token is emailed to the
+    /// account's address.
+    ///
+    /// Requires an API token. After calling this, the client's token is stale —
+    /// build a new [`Gofile`] once you have the replacement.
+    pub async fn reset_token(&self, account_id: &str) -> Result<serde_json::Value> {
+        let resp = self
+            .authorize(
+                self.http
+                    .post(self.api_url(&format!("/accounts/{account_id}/resettoken"))),
+            )
+            .send()
+            .await?;
+        decode(resp).await
+    }
+
     // ----- internals ------------------------------------------------------
 
     fn api_url(&self, path: &str) -> String {
