@@ -218,6 +218,15 @@ body {
 .menu .sep { height: 1px; background: var(--line); margin: 4px 0; }
 .menu button.danger { color: #ff8585; }
 
+/* Floating (cursor-anchored) context menu */
+.menu.context { position: fixed; top: auto; right: auto; min-width: 210px; }
+.menu.context button { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+.menu.context button .accel { color: var(--muted); font-size: 11.5px; }
+.menu.context button.disabled, .menu.context button:disabled { color: var(--line); cursor: default; }
+.menu.context button.disabled:hover, .menu.context button:disabled:hover { background: transparent; }
+
+.row.cut { opacity: .45; }
+
 .empty { text-align: center; color: var(--muted); padding: 60px; }
 
 /* ---------- Drop overlay ---------- */

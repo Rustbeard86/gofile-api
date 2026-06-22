@@ -19,6 +19,9 @@ const state = {
   filter: "",
   searchMode: false,
   concurrency: Number(localStorage.getItem("gf_concurrency") || 4),
+  rendered: [],          // children currently shown (sorted/filtered), for index math
+  lastIndex: -1,         // anchor for shift-range selection
+  clipboard: null,       // { mode: "copy" | "cut", ids: [] }
 };
 
 /* ---------------- Small helpers ---------------- */
@@ -250,12 +253,16 @@ function renderRows() {
   const rows = $("#rows");
   rows.innerHTML = "";
   const arr = sortedFiltered();
+  state.rendered = arr;
   $("#empty").classList.toggle("hidden", arr.length > 0);
+  const cutSet = state.clipboard && state.clipboard.mode === "cut" ? new Set(state.clipboard.ids) : new Set();
 
-  for (const c of arr) {
+  arr.forEach((c, index) => {
     const isFolder = c.type === "folder";
     const row = document.createElement("div");
-    row.className = "row" + (state.selection.has(c.id) ? " selected" : "");
+    row.className = "row" + (state.selection.has(c.id) ? " selected" : "") + (cutSet.has(c.id) ? " cut" : "");
+    row.dataset.id = c.id;
+    row.dataset.index = String(index);
     const count = isFolder && (c.childrenCount != null) ? `<span class="count">${c.childrenCount}</span>` : "";
     const pub = c.public
       ? `<span class="badge badge-public">public</span>`
@@ -281,20 +288,69 @@ function renderRows() {
         <button class="btn btn-sm btn-icon" data-act="menu">⋮</button>
       </div>`;
 
-    // checkbox
-    row.querySelector(".cb input").onchange = (e) => { toggleSelect(c.id, e.target.checked); row.classList.toggle("selected", e.target.checked); };
-    // name click → open folder
-    const title = row.querySelector(".name-title");
-    if (isFolder) title.onclick = () => openFolder(c.id, c.name);
-    // actions
-    row.querySelector('[data-act="open"]').onclick = () => isFolder ? openFolder(c.id, c.name) : openInBrowser(c);
+    // explicit checkbox still works
+    row.querySelector(".cb input").onclick = (e) => e.stopPropagation();
+    row.querySelector(".cb input").onchange = (e) => { toggleSelect(c.id, e.target.checked); row.classList.toggle("selected", e.target.checked); state.lastIndex = index; };
+
+    // Explorer-style click selection (ignore clicks on buttons / checkbox)
+    row.onclick = (e) => {
+      if (e.target.closest("button") || e.target.closest(".cb")) return;
+      handleRowClick(index, c.id, e);
+    };
+    row.ondblclick = (e) => {
+      if (e.target.closest("button") || e.target.closest(".cb")) return;
+      isFolder ? openFolder(c.id, c.name) : openInBrowser(c);
+    };
+    row.oncontextmenu = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!state.selection.has(c.id)) selectOnly(c.id, index);
+      showContextMenu(e.clientX, e.clientY, rowMenuItems());
+    };
+
+    // action buttons
+    row.querySelector('[data-act="open"]').onclick = (e) => { e.stopPropagation(); isFolder ? openFolder(c.id, c.name) : openInBrowser(c); };
     const dl = row.querySelector('[data-act="download"]');
-    if (dl) dl.onclick = () => openInBrowser(c);
-    row.querySelector('[data-act="menu"]').onclick = (e) => { e.stopPropagation(); openRowMenu(row.querySelector(".actions-cell"), c); };
+    if (dl) dl.onclick = (e) => { e.stopPropagation(); openInBrowser(c); };
+    row.querySelector('[data-act="menu"]').onclick = (e) => {
+      e.stopPropagation();
+      if (!state.selection.has(c.id)) selectOnly(c.id, index);
+      const r = e.target.getBoundingClientRect();
+      showContextMenu(r.right, r.bottom, rowMenuItems());
+    };
 
     rows.appendChild(row);
-  }
+  });
   $("#select-all").checked = arr.length > 0 && arr.every((c) => state.selection.has(c.id));
+}
+
+/* ---------------- Explorer-style selection ---------------- */
+function handleRowClick(index, id, e) {
+  if (e.shiftKey && state.lastIndex >= 0) {
+    const [a, b] = [state.lastIndex, index].sort((x, y) => x - y);
+    if (!e.ctrlKey) state.selection.clear();
+    for (let i = a; i <= b; i++) state.selection.add(state.rendered[i].id);
+  } else if (e.ctrlKey) {
+    state.selection.has(id) ? state.selection.delete(id) : state.selection.add(id);
+    state.lastIndex = index;
+  } else {
+    selectOnly(id, index);
+    return;
+  }
+  updateBulkBar();
+  renderRows();
+}
+
+function selectOnly(id, index) {
+  state.selection.clear();
+  state.selection.add(id);
+  state.lastIndex = index ?? -1;
+  updateBulkBar();
+  renderRows();
+}
+
+function selectedItems() {
+  return state.rendered.filter((c) => state.selection.has(c.id));
 }
 
 function fileIcon(c) {
@@ -308,43 +364,111 @@ function openInBrowser(child) {
   else toast("No public link available for this item.", "error");
 }
 
-/* ---------------- Row context menu ---------------- */
-function openRowMenu(anchor, c) {
+/* ---------------- Context menus ---------------- */
+// Build and show a floating menu at viewport coords from an items array:
+//   ["Label", handler, { danger, accel }]  or  ["sep"]
+function showContextMenu(x, y, items) {
   closeMenus();
-  const isFolder = c.type === "folder";
   const menu = document.createElement("div");
-  menu.className = "menu";
-  const items = [
-    ["Rename", () => renameItem(c)],
-    ["Direct link", () => makeDirectLink(c.id)],
-    ["Copy ID", () => { navigator.clipboard.writeText(c.id); toast("ID copied", "success"); }],
-    ["Move…", () => moveOrCopy([c.id], "move")],
-    ["Copy to…", () => moveOrCopy([c.id], "copy")],
-    ["sep"],
-    ["Toggle public", () => setAttr(c.id, "public", c.public ? "false" : "true", `Set ${c.public ? "private" : "public"}`)],
-  ];
-  if (isFolder) {
-    items.push(["Set description", () => editAttr(c.id, "description", "Description", c.description)]);
-    items.push(["Set tags", () => editAttr(c.id, "tags", "Tags (comma separated)", c.tags)]);
-    items.push(["Set password", () => editAttr(c.id, "password", "Password", "")]);
-    items.push(["Set expiry (unix)", () => editAttr(c.id, "expiry", "Expiry (unix timestamp)", c.expire)]);
-  }
-  items.push(["Properties", () => propsDialog(c)]);
-  items.push(["sep"]);
-  items.push(["Delete", () => deleteItems([c.id]), true]);
-
+  menu.className = "menu context";
   for (const it of items) {
     if (it[0] === "sep") { const s = document.createElement("div"); s.className = "sep"; menu.appendChild(s); continue; }
+    const [label, handler, opts = {}] = it;
     const b = document.createElement("button");
-    b.textContent = it[0];
-    if (it[2]) b.className = "danger";
-    b.onclick = () => { closeMenus(); it[1](); };
+    b.innerHTML = `<span>${escapeHtml(label)}</span>${opts.accel ? `<span class="accel">${escapeHtml(opts.accel)}</span>` : ""}`;
+    if (opts.danger) b.className = "danger";
+    if (opts.disabled) { b.disabled = true; b.classList.add("disabled"); }
+    else b.onclick = () => { closeMenus(); handler(); };
     menu.appendChild(b);
   }
-  anchor.appendChild(menu);
-  setTimeout(() => document.addEventListener("click", closeMenus, { once: true }), 0);
+  document.body.appendChild(menu);
+  // keep on-screen
+  const r = menu.getBoundingClientRect();
+  const left = Math.min(x, window.innerWidth - r.width - 8);
+  const top = Math.min(y, window.innerHeight - r.height - 8);
+  menu.style.left = `${Math.max(8, left)}px`;
+  menu.style.top = `${Math.max(8, top)}px`;
+  setTimeout(() => document.addEventListener("mousedown", onDocClose, true), 0);
 }
-function closeMenus() { $$(".menu").forEach((m) => m.remove()); }
+function onDocClose(e) { if (!e.target.closest(".menu.context")) closeMenus(); }
+function closeMenus() { $$(".menu").forEach((m) => m.remove()); document.removeEventListener("mousedown", onDocClose, true); }
+
+// Items for the current selection (one or many).
+function rowMenuItems() {
+  const sel = selectedItems();
+  const ids = sel.map((c) => c.id);
+  const single = sel.length === 1 ? sel[0] : null;
+  const isFolder = single && single.type === "folder";
+  const items = [];
+
+  if (single) {
+    items.push([single.type === "folder" ? "Open" : "View", () => single.type === "folder" ? openFolder(single.id, single.name) : openInBrowser(single), { accel: "Enter" }]);
+  }
+  items.push(["Cut", () => setClipboard(ids, "cut"), { accel: "Ctrl+X" }]);
+  items.push(["Copy", () => setClipboard(ids, "copy"), { accel: "Ctrl+C" }]);
+  items.push(["sep"]);
+  if (single) items.push(["Rename", () => renameItem(single), { accel: "F2" }]);
+  items.push(["Create direct link", () => ids.forEach(makeDirectLink)]);
+  if (single) items.push(["Copy ID", () => { navigator.clipboard.writeText(single.id); toast("ID copied", "success"); }]);
+  items.push(["Make public", () => ids.forEach((id) => setAttr(id, "public", "true", "Set public")) ]);
+  items.push(["Make private", () => ids.forEach((id) => setAttr(id, "public", "false", "Set private")) ]);
+  if (isFolder) {
+    items.push(["sep"]);
+    items.push(["Set description…", () => editAttr(single.id, "description", "Description", single.description)]);
+    items.push(["Set tags…", () => editAttr(single.id, "tags", "Tags (comma separated)", single.tags)]);
+    items.push(["Set password…", () => editAttr(single.id, "password", "Password", "")]);
+    items.push(["Set expiry…", () => editAttr(single.id, "expiry", "Expiry (unix timestamp)", single.expire)]);
+  }
+  items.push(["sep"]);
+  items.push(["Delete", () => deleteItems(ids), { danger: true, accel: "Del" }]);
+  if (single) { items.push(["sep"]); items.push(["Properties", () => propsDialog(single)]); }
+  return items;
+}
+
+// Items for the empty folder background.
+function backgroundMenuItems() {
+  const hasClip = state.clipboard && state.clipboard.ids.length;
+  return [
+    ["New folder", () => createFolder()],
+    ["Upload files", () => pickAndUpload()],
+    ["sep"],
+    ["Paste", () => pasteHere(), { accel: "Ctrl+V", disabled: !hasClip }],
+    ["sep"],
+    ["Select all", () => selectAll(), { accel: "Ctrl+A" }],
+    ["Refresh", () => reloadCurrent(), { accel: "F5" }],
+  ];
+}
+
+/* ---------------- Clipboard (cut / copy / paste) ---------------- */
+function setClipboard(ids, mode) {
+  state.clipboard = { ids: [...ids], mode };
+  toast(`${mode === "cut" ? "Cut" : "Copied"} ${ids.length} item(s) — open a folder and paste (Ctrl+V)`, "info");
+  updateBulkBar();
+  renderRows();
+}
+
+async function pasteHere() {
+  const clip = state.clipboard;
+  if (!clip || !clip.ids.length) return;
+  const dest = state.stack[state.stack.length - 1].id;
+  try {
+    if (clip.mode === "cut") {
+      await invoke("move_contents", { contentIds: clip.ids, destFolderId: dest });
+      state.clipboard = null;
+      toast("Moved here", "success");
+    } else {
+      await invoke("copy_contents", { contentIds: clip.ids, destFolderId: dest });
+      toast("Copied here", "success");
+    }
+    await reloadCurrent();
+  } catch (e) { toast(String(e), "error", 6000); }
+}
+
+function selectAll() {
+  state.rendered.forEach((c) => state.selection.add(c.id));
+  updateBulkBar();
+  renderRows();
+}
 
 /* ---------------- Selection / bulk ---------------- */
 function toggleSelect(id, on) { on ? state.selection.add(id) : state.selection.delete(id); updateBulkBar(); }
@@ -352,6 +476,8 @@ function updateBulkBar() {
   const n = state.selection.size;
   $("#bulkbar").classList.toggle("hidden", n === 0);
   $("#bulk-count").textContent = `${n} selected`;
+  const paste = $("#bulk-paste");
+  if (paste) paste.disabled = !(state.clipboard && state.clipboard.ids.length);
 }
 
 /* ---------------- Actions ---------------- */
@@ -392,19 +518,6 @@ async function deleteItems(ids) {
   if (!ok) return;
   try { await invoke("delete_contents", { contentIds: ids }); toast("Deleted", "success"); state.selection.clear(); await reloadCurrent(); }
   catch (e) { toast(String(e), "error", 6000); }
-}
-
-async function moveOrCopy(ids, mode) {
-  const v = await promptForm(mode === "move" ? "Move to folder" : "Copy to folder",
-    [{ name: "dest", label: "Destination folder ID (tip: use ‘Copy ID’ on a folder, or paste root)", value: state.rootId || "" }],
-    mode === "move" ? "Move" : "Copy");
-  if (!v || !v.dest) return;
-  try {
-    await invoke(mode === "move" ? "move_contents" : "copy_contents", { contentIds: ids, destFolderId: v.dest.trim() });
-    toast(mode === "move" ? "Moved" : "Copied", "success");
-    state.selection.clear();
-    await reloadCurrent();
-  } catch (e) { toast(String(e), "error", 6000); }
 }
 
 async function makeDirectLink(id) {
@@ -528,12 +641,13 @@ function wire() {
 
   // Bulk actions
   $$('[data-bulk]').forEach((b) => b.onclick = () => {
+    const m = b.dataset.bulk;
+    if (m === "paste") { pasteHere(); return; }
     const ids = Array.from(state.selection);
     if (!ids.length) return;
-    const m = b.dataset.bulk;
     if (m === "delete") deleteItems(ids);
-    else if (m === "move") moveOrCopy(ids, "move");
-    else if (m === "copy") moveOrCopy(ids, "copy");
+    else if (m === "cut") setClipboard(ids, "cut");
+    else if (m === "copy") setClipboard(ids, "copy");
     else if (m === "directlink") ids.forEach((id) => makeDirectLink(id));
   });
   $("#bulk-clear").onclick = () => { state.selection.clear(); updateBulkBar(); renderRows(); };
@@ -551,6 +665,80 @@ function wire() {
       const paths = (e.payload && e.payload.paths) || [];
       if (paths.length) uploadPaths(paths);
     });
+  }
+
+  // Suppress the native webview right-click menu everywhere.
+  document.addEventListener("contextmenu", (e) => e.preventDefault());
+
+  // Right-click on the folder background (not on a row) → background menu.
+  $("#content").addEventListener("contextmenu", (e) => {
+    if (e.target.closest(".row")) return; // rows handle their own
+    e.preventDefault();
+    showContextMenu(e.clientX, e.clientY, backgroundMenuItems());
+  });
+  // Clicking empty space clears the selection.
+  $("#content").addEventListener("mousedown", (e) => {
+    if (e.button === 0 && !e.target.closest(".row") && !e.target.closest(".list-head")) {
+      state.selection.clear(); state.lastIndex = -1; updateBulkBar(); renderRows();
+    }
+  });
+
+  // Keyboard shortcuts (Explorer-style)
+  document.addEventListener("keydown", onKeyDown);
+}
+
+function typingInField(e) {
+  const t = e.target;
+  return t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable);
+}
+
+function onKeyDown(e) {
+  // Only active while browsing and no modal is open.
+  if (!$("#modal-host").classList.contains("hidden")) {
+    if (e.key === "Escape") closeMenus();
+    return;
+  }
+  if ($("#app").classList.contains("hidden")) return;
+
+  if (e.key === "Escape") { closeMenus(); state.selection.clear(); updateBulkBar(); renderRows(); return; }
+
+  // Ctrl+F focuses the filter even while not typing.
+  if (e.ctrlKey && (e.key === "f" || e.key === "F")) { e.preventDefault(); $("#filter-input").focus(); return; }
+
+  if (typingInField(e)) return; // let inputs handle their own keys
+
+  const sel = selectedItems();
+  const ids = sel.map((c) => c.id);
+
+  if (e.ctrlKey && (e.key === "a" || e.key === "A")) { e.preventDefault(); selectAll(); return; }
+  if (e.ctrlKey && (e.key === "c" || e.key === "C")) { if (ids.length) setClipboard(ids, "copy"); return; }
+  if (e.ctrlKey && (e.key === "x" || e.key === "X")) { if (ids.length) setClipboard(ids, "cut"); return; }
+  if (e.ctrlKey && (e.key === "v" || e.key === "V")) { pasteHere(); return; }
+
+  if (e.key === "Delete") { if (ids.length) deleteItems(ids); return; }
+  if (e.key === "F2") { if (sel.length === 1) renameItem(sel[0]); return; }
+  if (e.key === "F5") { e.preventDefault(); reloadCurrent(); return; }
+  if (e.key === "Enter") {
+    if (sel.length === 1) { sel[0].type === "folder" ? openFolder(sel[0].id, sel[0].name) : openInBrowser(sel[0]); }
+    return;
+  }
+  // Backspace / Alt+Left → go up one folder.
+  if (e.key === "Backspace" || (e.altKey && e.key === "ArrowLeft")) {
+    e.preventDefault();
+    if (state.stack.length > 1) { const up = state.stack[state.stack.length - 2]; openFolder(up.id, up.name); }
+    return;
+  }
+  // Arrow up/down move the single selection.
+  if ((e.key === "ArrowDown" || e.key === "ArrowUp") && state.rendered.length) {
+    e.preventDefault();
+    let idx = state.lastIndex;
+    idx = e.key === "ArrowDown" ? Math.min(state.rendered.length - 1, idx + 1) : Math.max(0, idx - 1);
+    const c = state.rendered[idx];
+    if (c) {
+      selectOnly(c.id, idx);
+      const row = $(`.row[data-index="${idx}"]`);
+      if (row) row.scrollIntoView({ block: "nearest" });
+    }
   }
 }
 
